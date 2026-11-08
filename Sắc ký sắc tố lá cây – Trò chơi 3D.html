@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sắc ký sắc tố lá cây – Trò chơi 3D</title>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{--bgA:#fbe9cc;--bgB:#e6b283;--panel:#fbefd5;--ink:#4a2c1a;--sub:#7d5a42;--acc:#c0592b;--line:#dcbf92;--bad:#a8281c;--good:#2c7437;box-sizing:border-box}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bgA:#4a2e1c;--bgB:#1f120b;--panel:#3a2518;--ink:#f8e6c8;--sub:#cfae8c;--acc:#f08a55;--line:#5c3d28;--bad:#ff9a8f;--good:#9bd9a5}}
+:root[data-theme="dark"]{--bgA:#4a2e1c;--bgB:#1f120b;--panel:#3a2518;--ink:#f8e6c8;--sub:#cfae8c;--acc:#f08a55;--line:#5c3d28;--bad:#ff9a8f;--good:#9bd9a5}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:radial-gradient(120% 90% at 50% 20%,var(--bgA),var(--bgB));color:var(--ink);font-family:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",sans-serif}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+header{position:fixed;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 0;pointer-events:none}
+h1{margin:0;font-size:19px;font-weight:800;letter-spacing:-.01em}
+#step{margin:2px 0 6px;font-size:13px;color:var(--sub)}
+#dots{display:flex;gap:5px}
+#dots i{width:22px;height:5px;border-radius:3px;background:var(--line)}
+#dots i.on{background:var(--acc)}
+#panel{position:fixed;left:10px;right:10px;bottom:0;margin:0 auto;max-width:560px;padding:14px 14px calc(env(safe-area-inset-bottom,0px) + 14px);background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 0 0;box-shadow:0 -6px 24px rgba(60,30,10,.18)}
+#panel.shake{animation:sh .35s}
+@keyframes sh{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+#txt{font-size:15px;line-height:1.5;margin:0 0 10px}
+#msg{font-size:14px;line-height:1.45;margin:0 0 10px;padding:8px 10px;border-radius:8px;display:none}
+#msg.bad{display:block;background:rgba(168,40,28,.12);color:var(--bad)}
+#msg.good{display:block;background:rgba(44,116,55,.13);color:var(--good)}
+#btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;font-size:14px;font-weight:600;min-height:44px;padding:8px 14px;border-radius:10px;border:1.5px solid var(--acc);background:transparent;color:var(--ink);cursor:pointer}
+button.p{background:var(--acc);color:#fff}
+button:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+#err{position:fixed;inset:30% 20px auto;text-align:center;display:none}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<header><h1>Sắc ký sắc tố lá cây</h1><div id="step"></div><div id="dots"></div></header>
+<div id="err">Trình duyệt không hỗ trợ WebGL nên không thể hiển thị cảnh 3D.</div>
+<section id="panel"><div id="msg"></div><p id="txt"></p><div id="btns"></div></section>
+<script>addEventListener('error',function(e){var x=document.getElementById('err');x.style.display='block';x.textContent='Lỗi tải trò chơi: '+(e.message||'không rõ')+'. Hãy chụp màn hình dòng này gửi lại cho mình.'});</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const CH=[
+ {n:'Carotene',c:0xf08a24,rf:.95,w:1,a:.9,note:'Màu cam, ít phân cực nhất nên ái lực với dung môi (pha động) mạnh và đi xa nhất.'},
+ {n:'Xanthophyll',c:0xe8c52e,rf:.71,w:1,a:.9,note:'Màu vàng, phân cực hơn carotene nên đi chậm hơn.'},
+ {n:'Chlorophyll a',c:0x1f8f78,rf:.45,w:1.1,a:.9,note:'Màu xanh lục lam, bị giấy (pha tĩnh) giữ lại nhiều hơn.'},
+ {n:'Chlorophyll b',c:0x86b03a,rf:.35,w:1.1,a:.9,note:'Màu xanh lục vàng, phân cực hơn chlorophyll a.'}];
+const AN=(c)=>({n:'Anthocyanin',c,rf:.05,w:1.1,a:.9,note:'Rất phân cực và tan tốt trong nước nên gần như ở lại vạch xuất phát khi dùng dung môi không phân cực.'});
+const dim=a=>a.map(b=>({...b,a:.55}));
+const LEAVES=[
+ {name:'Lá xanh thông thường',col:0x3f8f3a,ext:0x2f7a2a,bands:CH,anth:false},
+ {name:'Lá tía tô',col:0x6a2a5c,ext:0x4b2a4a,bands:[...dim(CH),AN(0x8a2a6a)],anth:true},
+ {name:'Lá huyết dụ',col:0xb02a30,ext:0x7a2a24,bands:[...dim(CH),AN(0xb02a50)],anth:true}];
+const NAMES=['Chọn mẫu lá','Nghiền lá','Chiết sắc tố','Chấm mẫu','Đặt giấy vào bình','Chạy sắc ký','Đo và tính Rf'];
+const DIST=7;
+
+let renderer;
+try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:true})}catch(e){$('#err').style.display='block'}
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(40,1,.1,100);
+if(renderer){renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;$('#stage').appendChild(renderer.domElement)}
+
+scene.add(new THREE.HemisphereLight(0xfff1d8,0x8a5a3b,.95));
+const sun=new THREE.DirectionalLight(0xffe2b8,.85);sun.position.set(4,9,6);sun.castShadow=true;sun.shadow.mapSize.set(1024,1024);
+Object.assign(sun.shadow.camera,{left:-6,right:6,top:6,bottom:-6});scene.add(sun);
+const M=(c,o={})=>new THREE.MeshStandardMaterial({color:c,roughness:.6,...o});
+const B=(c,o={})=>new THREE.MeshBasicMaterial({color:c,transparent:true,...o});
+const table=new THREE.Mesh(new THREE.CircleGeometry(9,64),M(0xc88a58,{roughness:.85}));table.rotation.x=-Math.PI/2;table.receiveShadow=true;scene.add(table);
+
+// leaves
+const leafObjs=[];
+function leafMesh(col){
+ const g=new THREE.Group(),s=new THREE.Shape();
+ s.moveTo(0,-1);s.bezierCurveTo(.9,-.5,.8,.6,0,1.3);s.bezierCurveTo(-.8,.6,-.9,-.5,0,-1);
+ const geo=new THREE.ExtrudeGeometry(s,{depth:.05,bevelEnabled:false});geo.rotateX(-Math.PI/2);
+ const m=new THREE.Mesh(geo,M(col,{side:THREE.DoubleSide}));m.castShadow=true;g.add(m);
+ const v=new THREE.Mesh(new THREE.BoxGeometry(.035,.02,2.2),M(0xe9d9a0));v.position.set(0,.06,-.15);g.add(v);
+ const st=new THREE.Mesh(new THREE.CylinderGeometry(.03,.03,.5),M(0x6b8a3a));st.rotation.x=Math.PI/2;st.position.set(0,.03,1.2);g.add(st);
+ return g}
+[[-1.3,1.4],[1.3,1.4],[0,-.1]].forEach((p,i)=>{const l=leafMesh(LEAVES[i].col);l.position.set(p[0],.03,p[1]);l.rotation.y=(i-1)*.5;l.scale.setScalar(.9);l.userData.i=i;scene.add(l);leafObjs.push(l)});
+
+// mortar + pestle
+const MZ=-1.8,mortar=new THREE.Group();mortar.position.set(0,0,MZ);
+const pts=[[0,0],[.5,0],[.9,.4],[1,.9],[1.06,.95],[.95,.96],[.82,.5],[.4,.16],[0,.12]].map(p=>new THREE.Vector2(p[0],p[1]));
+const bowl=new THREE.Mesh(new THREE.LatheGeometry(pts,40),M(0xf3e6cf,{side:THREE.DoubleSide,roughness:.4}));bowl.castShadow=true;mortar.add(bowl);
+const mliq=new THREE.Mesh(new THREE.CircleGeometry(.78,32),B(0x2f7a2a,{opacity:0}));mliq.rotation.x=-Math.PI/2;mliq.position.y=.33;mortar.add(mliq);
+scene.add(mortar);
+const pestle=new THREE.Group();
+const pc=new THREE.Mesh(new THREE.CylinderGeometry(.13,.16,1.6,16),M(0xf3e6cf,{roughness:.4}));pestle.add(pc);
+const ps=new THREE.Mesh(new THREE.SphereGeometry(.22,16,12),M(0xf3e6cf,{roughness:.4}));ps.position.y=-.8;pestle.add(ps);
+pestle.position.set(1.7,1.03,MZ);scene.add(pestle);
+const stream=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,2.2,10),B(0xf6efd8,{opacity:.7}));stream.position.set(0,1.6,MZ);stream.visible=false;scene.add(stream);
+
+// vial
+const vial=new THREE.Group();vial.position.set(1.3,0,-.6);vial.visible=false;
+const vg=new THREE.Mesh(new THREE.CylinderGeometry(.22,.22,.9,20,1,true),B(0xdff0f0,{opacity:.28,side:THREE.DoubleSide,depthWrite:false}));vg.position.y=.45;vial.add(vg);
+const vliq=new THREE.Mesh(new THREE.CylinderGeometry(.19,.19,.55,20),M(0x2f7a2a));vliq.position.y=.3;vial.add(vliq);scene.add(vial);
+
+// strip, stand, jar
+const stand=new THREE.Mesh(new THREE.BoxGeometry(1.3,.3,.7),M(0x8a5a3b));stand.position.y=.15;stand.castShadow=true;stand.visible=false;scene.add(stand);
+const strip=new THREE.Group();strip.position.set(0,.3,0);strip.visible=false;scene.add(strip);
+const paper=new THREE.Mesh(new THREE.BoxGeometry(1,3.2,.02),M(0xfaf3df,{roughness:.9}));paper.position.y=1.6;strip.add(paper);
+const wetG=new THREE.PlaneGeometry(1,1);wetG.translate(0,.5,0);
+const wet=new THREE.Mesh(wetG,B(0xa98a5a,{opacity:.28}));wet.position.z=.012;wet.scale.y=.001;strip.add(wet);
+const pline=new THREE.Mesh(new THREE.PlaneGeometry(.92,.026),B(0x3a3a3a));pline.position.set(0,.48,.013);pline.scale.x=.001;strip.add(pline);
+const spot=new THREE.Mesh(new THREE.CircleGeometry(1,24),B(0x2f7a2a));spot.position.set(0,.48,.014);spot.scale.setScalar(.001);strip.add(spot);
+const pencil=new THREE.Group();
+const pb=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,1,8),M(0xf2c230));pb.position.y=.5;pencil.add(pb);
+pencil.add(new THREE.Mesh(new THREE.ConeGeometry(.05,.14,8),M(0x3a2a20)));
+pencil.rotation.z=.7;pencil.visible=false;strip.add(pencil);
+const front=new THREE.Mesh(new THREE.BoxGeometry(1,.015,.02),M(0xe2572b));front.position.set(0,.48+DIST*.32,.015);front.visible=false;strip.add(front);
+const ruler=new THREE.Group();ruler.visible=false;strip.add(ruler);
+const rb=new THREE.Mesh(new THREE.BoxGeometry(.14,2.4,.02),M(0xf5d678));rb.position.set(-.65,.48+1.12,.02);ruler.add(rb);
+function tex(t){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');x.fillStyle='#4a2c1a';x.font='bold 40px sans-serif';x.textAlign='center';x.textBaseline='middle';x.fillText(t,32,34);return new THREE.CanvasTexture(c)}
+for(let i=0;i<=7;i++){
+ const t=new THREE.Mesh(new THREE.BoxGeometry(.1,.01,.025),M(0x4a2c1a));t.position.set(-.62,.48+i*.32,.03);ruler.add(t);
+ const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex(i),depthTest:false}));sp.scale.setScalar(.2);sp.position.set(-.86,.48+i*.32,.05);ruler.add(sp)}
+const mk=new THREE.Mesh(new THREE.BoxGeometry(1.5,.02,.02),M(0x2a5ec0));mk.position.x=-.1;mk.visible=false;strip.add(mk);
+const jar=new THREE.Group();jar.visible=false;scene.add(jar);
+const glass=new THREE.Mesh(new THREE.CylinderGeometry(.95,.95,3.6,40,1,true),B(0xddeeee,{opacity:.18,side:THREE.DoubleSide,depthWrite:false}));glass.position.y=1.85;jar.add(glass);
+const solv=new THREE.Mesh(new THREE.CylinderGeometry(.93,.93,.32,40),B(0xf2e3b0,{opacity:.5,depthWrite:false}));solv.position.y=.21;jar.add(solv);
+const jb=new THREE.Mesh(new THREE.CylinderGeometry(.95,.95,.05,40),M(0xd8e6e6));jb.position.y=.025;jar.add(jb);
+scene.traverse(o=>{if(o.isMesh&&o.parent!==scene&&o.parent!==mortar)o.castShadow=o.castShadow||false});
+
+// camera
+const PRE=[{tx:0,ty:.2,tz:.2,d:8,ph:1},{tx:0,ty:.6,tz:MZ,d:5.8,ph:.9},{tx:0,ty:.6,tz:MZ,d:5.8,ph:.9},{tx:0,ty:1.7,tz:0,d:6.2,ph:1.4},{tx:0,ty:1.7,tz:0,d:6.2,ph:1.4},{tx:0,ty:1.7,tz:0,d:6.2,ph:1.4},{tx:0,ty:1.9,tz:0,d:4.6,ph:1.45}];
+const V={...PRE[0]},T={...PRE[0]},drag={th:0,ph:0};
+function resize(){if(!renderer)return;const w=innerWidth,h=innerHeight;renderer.setSize(w,h);cam.aspect=w/h;cam.setViewOffset(w,h,0,h*.13,w,h);cam.updateProjectionMatrix()}
+addEventListener('resize',resize);resize();
+
+// tweens
+const tw=[];const ease=k=>k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+function tween(d,f,done){tw.push({t:0,d,f,done})}
+let last=performance.now();
+function loop(now){
+ const dt=Math.min(.05,(now-last)/1000);last=now;
+ for(const k of ['tx','ty','tz','d','ph'])V[k]+=(T[k]-V[k])*Math.min(1,dt*3);
+ const f=cam.aspect<1?Math.min(2,.85/cam.aspect):1,ph=Math.max(.25,Math.min(1.5,V.ph+drag.ph)),d=V.d*f,th=drag.th;
+ cam.position.set(V.tx+d*Math.sin(ph)*Math.sin(th),V.ty+d*Math.cos(ph),V.tz+d*Math.sin(ph)*Math.cos(th));cam.lookAt(V.tx,V.ty,V.tz);
+ tw.slice().forEach(o=>{o.t+=dt;const k=Math.min(o.t/o.d,1);o.f(ease(k));if(k>=1){tw.splice(tw.indexOf(o),1);o.done&&o.done()}});
+ renderer.render(scene,cam);requestAnimationFrame(loop)}
+if(renderer)requestAnimationFrame(loop);
+
+// input
+const cv=renderer&&renderer.domElement;let pd=null;
+if(cv){
+cv.addEventListener('pointerdown',e=>{pd={x:e.clientX,y:e.clientY,m:0};cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(!pd)return;const dx=e.clientX-pd.x,dy=e.clientY-pd.y;pd.m+=Math.abs(dx)+Math.abs(dy);drag.th=Math.max(-1.2,Math.min(1.2,drag.th-dx*.008));drag.ph-=dy*.006;pd.x=e.clientX;pd.y=e.clientY});
+cv.addEventListener('pointerup',e=>{if(pd&&pd.m<6&&st===0&&!tw.length){
+ const r=cv.getBoundingClientRect(),rc=new THREE.Raycaster();rc.setFromCamera({x:(e.clientX-r.left)/r.width*2-1,y:-((e.clientY-r.top)/r.height)*2+1},cam);
+ const h=rc.intersectObjects(leafObjs,true)[0];if(h){let o=h.object;while(o&&o.userData.i===undefined)o=o.parent;o&&pick(o.userData.i)}}
+ pd=null})}
+
+// ui
+let st=0,L=null,mist=0,gr=0,sub=0,bands=[];const seen=new Set();
+function ui(txt,btns){$('#txt').innerHTML=txt;const b=$('#btns');b.innerHTML='';
+ btns.forEach(x=>{const e=document.createElement('button');e.textContent=x.l;if(x.p)e.className='p';e.onclick=()=>{if(!tw.length)x.f()};b.appendChild(e)})}
+function say(m,k){const e=$('#msg');e.className=k||'';e.innerHTML=m}
+function bad(m){mist++;say(m,'bad');const p=$('#panel');p.classList.remove('shake');void p.offsetWidth;p.classList.add('shake')}
+function go(n){st=n;sub=0;Object.assign(T,PRE[Math.min(n,6)]);drag.th=drag.ph=0;
+ $('#step').textContent='Bước '+(n+1)+'/7 – '+NAMES[n];$('#dots').innerHTML=NAMES.map((_,i)=>'<i class="'+(i<=n?'on':'')+'"></i>').join('');S[n]()}
+
+const S=[
+()=>{say('');ui('Chạm vào một chiếc lá để chọn mẫu thí nghiệm. Kéo trên cảnh để xoay camera.',LEAVES.map((l,i)=>({l:l.name,f:()=>pick(i)})))},
+()=>ui('Nghiền nhỏ lá trong cối để phá vỡ tế bào và giải phóng sắc tố.',[{l:'Nghiền ('+gr+'/3)',p:1,f:grind}]),
+()=>{if(sub===0)ui('Chọn dung môi để chiết sắc tố ra khỏi mô lá.',[{l:'Ethanol hoặc axeton',p:1,f:()=>pour(true)},{l:'Nước muối',f:()=>pour(false)}]);
+ else ui('Lọc bỏ bã lá để lấy dịch chiết trong.',[{l:'Lọc lấy dịch chiết',p:1,f:filter}])},
+()=>{if(sub===0)ui('Kẻ vạch xuất phát cách mép dưới giấy sắc ký khoảng 1,5 cm.',[{l:'Dùng bút chì',p:1,f:()=>draw(true)},{l:'Dùng bút mực',f:()=>draw(false)}]);
+ else if(sub===1)ui('Chấm dịch chiết lên giữa vạch xuất phát.',[{l:'Chấm một giọt nhỏ',p:1,f:()=>dot(true)},{l:'Đổ thật nhiều dịch chiết',f:()=>dot(false)}]);
+ else ui('Điểm chấm đã hong khô. Sẵn sàng đưa giấy vào bình.',[{l:'Tiếp tục',p:1,f:()=>go(4)}])},
+()=>ui('Đặt giấy vào bình chứa dung môi. Mực dung môi phải ở đâu so với vạch xuất phát?',[{l:'Thấp hơn vạch xuất phát',p:1,f:()=>dip(true)},{l:'Cao hơn vạch xuất phát',f:()=>dip(false)}]),
+()=>{makeBands();ui('Dung môi sẽ dâng lên giấy nhờ mao dẫn và kéo các sắc tố đi theo.',[{l:'Bắt đầu chạy sắc ký',p:1,f:run}])},
+()=>{ruler.visible=front.visible=true;
+ ui('Đo từ vạch xuất phát (số 0 trên thước). Chạm từng vết màu để tính Rf = quãng đường sắc tố ÷ quãng đường dung môi ('+DIST+' cm).',
+  bands.map(b=>({l:(seen.has(b.n)?'✓ ':'')+b.n,f:()=>measure(b)})).concat(seen.size===bands.length?[{l:'Câu hỏi cuối',p:1,f:quiz}]:[]))}];
+
+function pick(i){if(st!==0||tw.length)return;L=LEAVES[i];const g=leafObjs[i];
+ leafObjs.forEach((o,j)=>{if(j!==i){const s=o.scale.x;tween(.6,k=>o.scale.setScalar(s*(1-k)),()=>o.visible=false)}});
+ const p0=g.position.clone();
+ tween(1.3,k=>{g.position.set(p0.x*(1-k),p0.y+Math.sin(k*Math.PI)*1.3+.5*k,p0.z+(MZ-p0.z)*k);g.scale.setScalar(.9-.2*k)},()=>{
+  mliq.material.color.setHex(L.ext);vliq.material.color.setHex(L.ext);spot.material.color.setHex(L.ext);say('Mẫu: '+L.name+'.','good');go(1)})}
+function grind(){const g=leafObjs[LEAVES.indexOf(L)];
+ tween(1.3,k=>{const a=k*Math.PI*6,p=(gr+k)/3;pestle.position.set(Math.cos(a)*.28,1.2,MZ+Math.sin(a)*.28);pestle.rotation.set(Math.sin(a)*.2,0,-Math.cos(a)*.2);
+  g.scale.setScalar(.7*(1-p*.9));mliq.material.opacity=p*.9},()=>{gr++;
+  if(gr<3)S[1]();else{g.visible=false;pestle.position.set(1.7,1.03,MZ);pestle.rotation.set(0,0,0);say('Lá đã nghiền nhuyễn.','good');go(2)}})}
+function pour(ok){if(!ok)return bad('Chlorophyll và carotenoid ít phân cực nên gần như không tan trong nước. Cần dung môi hữu cơ như ethanol hoặc axeton.');
+ stream.visible=true;tween(1.4,k=>{stream.scale.y=Math.sin(k*Math.PI)*.9+.1;mliq.material.opacity=.9;mliq.position.y=.33+.12*k},()=>{stream.visible=false;sub=1;say('Sắc tố đã hoà tan vào dung môi hữu cơ.','good');S[2]()})}
+function filter(){vial.visible=true;tween(1.5,k=>{vial.scale.setScalar(.2+.8*k);mliq.material.opacity=.9*(1-k*.8)},()=>{
+ mortar.visible=false;pestle.visible=false;go(3);stand.visible=strip.visible=true;say('Đã có dịch chiết sắc tố.','good')})}
+function draw(ok){if(!ok)return bad('Mực tan trong dung môi và chạy theo, làm nhiễu kết quả. Phải kẻ bằng bút chì vì than chì không tan.');
+ pencil.visible=true;tween(1.1,k=>{pline.scale.x=Math.max(.001,k);pencil.position.set(-.46+.92*k,.48+.02*Math.sin(k*30),.05)},()=>{pencil.visible=false;sub=1;say('Vạch bút chì sẽ không bị dung môi cuốn đi.','good');S[3]()})}
+function dot(ok){if(!ok){tween(.8,k=>spot.scale.setScalar(.001+.3*k),()=>{bad('Vết chấm quá to làm các vùng màu chồng lấn nhau. Hãy chấm lượng nhỏ, có thể chấm nhiều lần và hong khô giữa các lần.');spot.scale.setScalar(.001)});return}
+ tween(.7,k=>spot.scale.setScalar(.001+.07*k),()=>{sub=2;say('Vết chấm nhỏ giúp các vùng màu tách rõ.','good');S[3]()})}
+function dip(ok){stand.visible=false;jar.visible=true;
+ if(ok)return tween(1.4,k=>{glass.material.opacity=.18*k;solv.material.opacity=.5*k;jb.material.opacity=1;strip.position.y=.3-.2*k},()=>{say('Điểm chấm nằm trên mặt dung môi nên không bị hoà tan.','good');go(5)});
+ tween(1.8,k=>{glass.material.opacity=.18;solv.scale.y=1+2.4*Math.min(1,k*1.5);solv.position.y=.05+.16*solv.scale.y;spot.material.opacity=1-Math.min(1,k*1.4)},()=>{
+  bad('Nếu dung môi ngập vạch xuất phát, mẫu sẽ hoà tan vào bình và không còn phân tách trên giấy. Mực dung môi phải thấp hơn vạch.');
+  jar.visible=false;stand.visible=true;solv.scale.y=1;solv.position.y=.21;spot.material.opacity=1})}
+function makeBands(){bands=L.bands.map((b,i)=>{const m=new THREE.Mesh(new THREE.CircleGeometry(1,28),B(b.c,{opacity:0}));m.position.set(0,.48,.015+i*.0006);m.scale.set(.34*b.w,.05,1);strip.add(m);return{...b,m}})}
+function setFront(k){const fr=.27+(2.72-.27)*k,fd=Math.max(0,fr-.48);wet.scale.y=fr;
+ bands.forEach(b=>{b.m.position.y=.48+b.rf*fd;b.m.scale.set(.34*b.w,.05+.05*fd*b.w,1);b.m.material.opacity=b.a*Math.min(1,fd/.25)});
+ spot.material.opacity=1-Math.min(1,fd/.35);T.ty=.5+fr*.75}
+function run(){say('Mao dẫn: dung môi len lỏi giữa các sợi cellulose (pha tĩnh) và cuốn sắc tố đi lên.');let a=0,b=0;
+ ui('Đang chạy sắc ký…',[]);
+ tween(13,k=>{setFront(k);if(k>.3&&!a){a=1;say('Sắc tố ít phân cực ưa pha động hơn nên đi nhanh hơn; sắc tố bị giấy giữ lại nhiều thì đi chậm.')}if(k>.7&&!b){b=1;say('Các vùng màu đang tách dần theo ái lực khác nhau.')}},()=>{
+  ui('Dung môi gần tới mép trên. Dùng bút chì đánh dấu mặt trước dung môi rồi lấy giấy ra khỏi bình.',[{l:'Lấy giấy ra',p:1,f:takeOut}])})}
+function takeOut(){stand.visible=true;tween(1.2,k=>{strip.position.y=.1+.2*k;glass.material.opacity=.18*(1-k);solv.material.opacity=.5*(1-k);jb.material.opacity=1-k},()=>{jar.visible=false;say('Đã đánh dấu mặt trước dung môi (vạch cam).','good');go(6)})}
+function measure(b){const d=(b.m.position.y-.48),cm=d/.32,rf=cm/DIST;seen.add(b.n);
+ mk.visible=true;mk.position.y=b.m.position.y;
+ say('<b>'+b.n+'</b>: '+cm.toFixed(1)+' cm ÷ '+DIST.toFixed(1)+' cm = <b>Rf '+rf.toFixed(2)+'</b>. '+b.note+' (Rf không có đơn vị, nằm trong khoảng 0 đến 1.)','good');S[6]()}
+function quiz(){mk.visible=false;const o=bands.slice().sort(()=>Math.random()-.5);
+ ui('Câu hỏi cuối: vết nào có Rf lớn nhất, tức là đi xa nhất cùng dung môi?',o.map(b=>({l:b.n,f:()=>b===bands[0]?end():bad('Chưa đúng. Rf lớn nhất ứng với vết đi xa nhất, gần mặt trước dung môi nhất.')})))}
+function end(){const s=mist===0?'★★★':mist<=2?'★★☆':'★☆☆';say('');
+ ui('<b>Hoàn thành!</b> '+s+' Số lần thao tác sai: '+mist+'.<br>'+(L.anth?'Anthocyanin giải thích màu đỏ tím của lá nhưng phân cực mạnh, nên cần hệ dung môi phù hợp mới tách rõ; lá đỏ tím vẫn chứa chlorophyll và carotenoid.':'Lá xanh vẫn chứa carotenoid; chúng chỉ bị chlorophyll che màu.')+' Giá trị Rf trong game mang tính minh hoạ, thực tế phụ thuộc mẫu lá, loại giấy và hệ dung môi.',[{l:'Chơi lại',p:1,f:()=>location.reload()}])}
+if(renderer)go(0);
+</script>
+</body>
+</html>
